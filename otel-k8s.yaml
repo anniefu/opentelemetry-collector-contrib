@@ -1,0 +1,96 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-agent-conf
+  labels:
+    app: opentelemetry
+    component: otel-agent-conf
+data:
+  otel-agent-config: |
+    receivers:
+      opencensus:
+        endpoint: 0.0.0.0:55678
+    exporters:
+      stackdriver:
+        metric_prefix: "knative.dev/serving/"
+      prometheus:
+        endpoint: ":9090"
+
+    extensions:
+      health_check:
+      pprof:
+        endpoint: :1888
+      zpages:
+        endpoint: :55679
+
+    service:
+      extensions: [pprof, zpages, health_check]
+      pipelines:
+        metrics:
+          receivers: [opencensus]
+          exporters: [stackdriver, prometheus]
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: otel-agent
+  labels:
+    app: opentelemetry
+    component: otel-agent
+spec:
+  template:
+    metadata:
+      labels:
+        app: opentelemetry
+        component: otel-agent
+    spec:
+      containers:
+      - command:
+          - /otelcontribcol
+          - --config=/conf/otel-agent-config.yaml
+        image: gcr.io/anniefu-knative-dev/otelcontribcol:latest
+        name: otel-agent
+        resources:
+          limits:
+            cpu: 500m
+            memory: 500Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        ports:
+        - containerPort: 55678 # Default Opencensus receiver port.
+        - containerPort: 55679 # ZPages endpoint.
+#        - containerPort: 14267 # Default Jaeger TChannel port.
+#        - containerPort: 14268 # Default Jaeger HTTP receiver port.
+#        - containerPort: 9411 # Default Zipkin receiver port.
+        volumeMounts:
+        - name: otel-agent-config-vol
+          mountPath: /conf
+      volumes:
+        - configMap:
+            name: otel-agent-conf
+            items:
+              - key: otel-agent-config
+                path: otel-agent-config.yaml
+          name: otel-agent-config-vol
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    serving.knative.dev/release: devel
+  name: opentelemetry
+spec:
+  ports:
+  - name: opentelemetry
+    port: 55678
+    protocol: TCP
+    targetPort: 55678
+  - name: zpages
+    port: 55679
+  - name: prometheus
+    port: 9090
+  selector:
+    component: otel-agent
+  type: ClusterIP
