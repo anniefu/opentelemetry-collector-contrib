@@ -74,7 +74,7 @@ run:
 docker-component: check-component
 	GOOS=linux $(MAKE) $(COMPONENT)
 	cp ./bin/linux/$(COMPONENT) ./cmd/$(COMPONENT)/
-	docker build -t $(COMPONENT) ./cmd/$(COMPONENT)/
+	docker build -t gcr.io/anniefu-knative-dev/$(COMPONENT) ./cmd/$(COMPONENT)/
 	rm ./cmd/$(COMPONENT)/$(COMPONENT)
 
 .PHONY: check-component
